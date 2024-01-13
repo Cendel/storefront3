@@ -1,0 +1,356 @@
+In this section, we'll be talking about performance testing.
+We're gonna throw a few hundred users on our application, and see how it performs.
+
+
+- Why Performance Testing
+
+  Performance testing is fairly complex, and you can read an entire book on it but in this section we are going to learn 
+  the basics and a few tools we can use to easily identify most of the performance problems in our applications.
+
+
+- Installing Locust
+
+  There are so many performance testing tools out there. But the one that I personally love is Locust because it's really 
+  simple. It has a beautiful UI and we can write our performance tests using Python. In the terminal:
+  
+        pipenv install --dev locust 
+        
+  Next we learn how to write a test script using python.
+
+
+
+- Creating a Test Script
+
+  As part of the performance testing, we need to identify the core use cases or the functions that are essential to our 
+  business. In our application, the core use cases:
+  
+        * browsing products
+        * Register, Ssign in, sign out
+        
+  In our project's root folder, we create a new folder called 'locustfiles'; the name does not matter.
+  In this folder, we add a new file called 'browse_products.py'; that's the use case we're going to test.
+  
+  In browse_products.py:
+  
+        from locust import HttpUser
+
+        class WebsiteUser(HttpUser):
+        
+  We can call the class anything but it should extend HTTPUser.
+  When we run a performance test, locust is going to create an instance of this class for each user, and execute the tasks 
+  that we define in this class. These tasks include viewing products, viewing particular product details, and adding a 
+  product to cart. So for each task, we are going to define a separate method:
+
+        def view_products(self):
+  
+  To make this method a task, we need to decorate it with the task decorator:
+
+        from locust import HttpUser, task
+
+
+        class WebsiteUser(HttpUser):
+            @task
+            def view_products(self):
+  
+  Here we are going to send a request to the products endpoint:
+
+        self.client.get('/store/products')
+  
+  In a real word situation, the user is going to go from one collection to another. So here we should generate a random 
+  value for the collection id:
+  
+        from random import randint
+            .
+            .
+            collection_id = randint(2, 6)
+        
+  Then we need to add that as a query string parameter:
+   
+        self.client.get(f'/store/products/?collection_id={collection_id}')
+        
+  
+  When we run this test, for each url that ends with different collection_id, we're going to have a separate row
+  in the report, and this is going to make our report to verbose. So here we need to add all these urls to a particular 
+  group to simplify our report. We will see that in the next lesson. And for that, we set the name argument:
+
+        self.client.get(
+            f'/store/products/?collection_id={collection_id}', 
+            name='/store/products')
+
+  So '/store/products' is the endpoint we are testing. Later we'll see if this endpoint is slower than it should.
+
+  This was our first task. Now let's create a task for viewing a particular product:
+  
+        @task
+        def view_product(self):
+            product_id = randint(1, 1000)
+            self.client.get(
+                f'/store/products/{product_id}', name='/store/products/:id')
+  
+  That was the second task. Now we need another task for adding a product to a cart:
+  
+        @task
+        def add_to_cart(self):
+            product_id = randint(1, 10)
+            self.client.post(f'/store/carts/{self.cart_id}/items/', name='/store/carts/items', json={
+                            'product_id': product_id, 'quantity': 1})
+
+  In the above code we needed a car id. This cart id should be generated when the user starts browsing our website.
+  For that, we have a special method in this class called 'on_start'. It is not a task; it's a lifecycle hook.
+  So this gets called every time a new user starts browsing our website: 
+
+        def on_start(self):
+            response = self.client.post('/store/carts/')
+            result = response.json()
+            self.cart_id = result['id']        
+
+  We have defined a bunch of tasks. 
+  Now we can give each task a 'weight', in other words a 'priority', because in a real word situation, it's more likely that a user views different 
+  products, then adds a product to their shopping cart.
+  So for the first task ('view_products'), we are going to give a weight of two: @task(2) 
+  For the second task @task(4), which means a user is twice more likely to execute this task than the first task.
+  These numbers are arbitrary; you can put any numbers you see fit. 
+  For the third task @task(1). 
+  Now we don't want these tasks to be executed immediately after one another because in the real world, it takes the user 
+  a few seconds or a minute to execute each task. 
+  So at the beginning of the WebsiteUser class, we set an attribute called 'wait_time'. For that, we first import the 
+  'between' function from locust. And we set 'wait_time' to values (1, 5). So locust is going to randomly wait 
+  between 1 to 5 seconds between each task. So when we run this test, for each user we want to simulate, locust is going 
+  to create an instance of this class and it will repetitively call these tasks, and apply a wait time after each task.
+  
+  This is how we create a test script. The beauty of this approach is that our test script is part of our code base.
+  So we're going to commit it to our repository, and every time we change our code, we can rerun our performance test to 
+  see if we have any issues or not. 
+  
+  Next we are going to learn how to run this test script.
+  
+
+
+- Running a Test Script
+
+  Let's talk about running a test script.
+  For this lesson, we will put a print statement inside each task ( at the beginning of each test function), 
+  so we can understand how locust execute the script:
+
+        for view_products => print('View products')
+        for view_product => print('View product details')
+        for add_to_cart => print('Add to cart')
+  
+  Now let's open the terminal window, and make sure your running your web server, then open a new terminal window and run:
+        
+        locust -f locustfiles/browse_products.py 
+  
+  Now locust is running at this address => http://localhost:8089
+  Go to that page. On this page we will specify the number of users. We set it to 1.
+  Next we specify the spawn rate, or the number of users that should be started each second. Again we set it to 1.
+  For Host, we specify 'http://localhost:8000'.
+  Now let's start swarming.
+  
+  Now on this page, we can see statistics about the requests sent to the server.
+  The names we see on the screen are the groups we specified for grouping related requests.
+  If we didn't apply grouping, we would end up with tons of rows in this table. 
+  
+  If you go back to our terminal window, we can see what this user is doing (these are our print statements that we defined.)
+  
+  For other tips as to what other readings on locust page mean, look at the video.
+  
+  Now we stop the test. In the next lesson, we are going to do a proper performance test to identify our slow endpoints.
+
+
+
+- Running a Performance Test
+
+  We are going to do a performance test to identify our slow endpoints.
+  We removed the print statements in our test. 
+
+  For this lesson, we are going to deliberately create a performance problem. 
+  Go to ProductViewSet. As you can see, we are eager loading a product with its images.
+  Let's see what happens if we remove the call to prefetch_related:
+        
+        queryset = Product.objects.all()
+        
+  So we want to study the impact of this on performance.
+  Now we should also go to our middleware setting and comment out Django debug toolbar because Django debug toolbar 
+  adds a bit of overhead and it's gonna mess with our performance report:
+        
+        #'debug_toolbar.middleware.DebugToolbarMiddleware',
+        
+  Now on the terminal, we restart the locust process.
+  This time, we are going to use 500 for the number of users, and 10 for the spawn rate.So every second locust is going to 
+  spin up 10 users until we get to 500 users; and those 500 users will continuously browse our website. Then start swarming.
+  
+  It's going to take a while until we get to 500 users. We will wait another 30 seconds or so until the results become stable.
+  
+  Now stop the test by clicking the stop button on the page. 
+  The first thing I want to highlight here is that we should not take any of these numbers as absolute values. 
+  Treat everything here as relative. You're running this on a development machine with a web server which is slow 
+  so this web server that comes with Django is meant for development; it doesn't have the performance of a real production 
+  web server. So if you run this test in a production environment, we're going to see different results and also every time 
+  we run the tests we're gonna see different results. So don't treat any of this values as absolute values.
+
+
+- Performance Optimization Techniques
+  
+  So by running a performance test, we can identify our slow endpoints. Let's talk about a few optimization techniques.
+  
+  Most of the time, I would say more than 90% of the time, the issue is either in the query, or in the database.
+  Here we have a few solutions. 
+  The first step is optimizing our Python code because we're using Django ORM to execute queries; so we should make sure 
+  that our Python code doesn't translate to costly queries. 
+  
+  NOTE: For some tips about making queries, look at some_orm_tips.py in -NOTES. You can find explanations of these tips 
+        in the video. I didn't include that part.
+    
+  What if we used these techniques but our query is still slow?
+  Then we may want to rewrite that query from scratch; because the query that Django ORM generates may not be optimal. 
+  So if you know SQL well, this is where you may want to rewrite that query from scratch in an optimized manner.
+  
+  What if the query is still slow? 
+  Then we need to tune our database by redesigning our tables, adding indexes, and so on. 
+  (The instructor covered these topics in more depth in his SQL course.) 
+  
+  What if our queries still slow? 
+  That's when we're going to store the result in memory. This technique is called 'caching'. So the first time the query gets 
+  executed, it is going to be a little bit slow but then we'll store the result in memory, and all subsequent requests 
+  will read the data from memory, and this is often, but not always, faster than reading it from a database or network.
+  Just remember, don't assume that caching is always a good strategy; because, sometimes, executing a simple query is faster 
+  than reading the result from the cache, especially in a production environment where you have a separate cash server.
+   
+  What if you have done all of this, and our performance test shows that after a certain point, let's say a thousand 
+  concurrent users, are application fails so some requests are never going to get respond, or it just take way too long?
+  If we can afford, that's when we need to buy more hardware so we can upgrade our server to one with a faster CPU and more 
+  RAM but at a certain point even that's not going to be enough. Then we need to add more servers; of course, that's going to 
+  be more costly. Or, if you can afford that; then you will learn to live with the problem, and that's okay. Not every part 
+  of our application should be blazing fast. We can only do these optimizations in critical parts that matter the most.
+
+
+
+- Profiling with Silk
+
+  So with locust, we can identify our slow endpoints. As we have learned in the previous lesson, most of the time the issue 
+  lies in the query or in the database. 
+  
+  This is where we use another amazing tool to identify the source of the issue; and that is called django-silk.
+  'Silk' is what we call a profiling tool; meaning we can use it to get an execution profile of our application.
+  
+  So we can see how each function gets executed, what queries are sent to the database, what time is spent on those queries, 
+  and so on. Here is github repository for django-silk => https://github.com/jazzband/django-silk:
+
+        pipenv install --dev django-silk
+  
+  Now we need to make a couple of changes in our settings module:
+  
+        # first we need to register the middleware:
+        
+        if DEBUG:
+            MIDDLEWARE += ['silk.middleware.SilkyMiddleware',]
+
+        # Next, we add it in the list of installed apps:
+        
+        'silk',
+  
+  Now we need to register a route for accessing silk. In storefront.urls.py:
+        
+        # We add it in the 'debug' section because we should use silk only in development and testing. We should never use it 
+        # in production because it adds significant overhead to each request.
+
+        urlpatterns += [path('silk/', include('silk.urls', namespace='silk'))]
+  
+  Now in terminal we need to run migrations because silk is going to create a new table for storing information about each 
+  request:
+        python manage.py migrate 
+  
+  Now silk is ready and we can access it at => http://localhost:8000/silk/
+
+  So this is the dashboard of silk (http://localhost:8000/silk/). Currently we don't have any data so now we can start 
+  browsing our application. Silk is going to intercept every request and it's going to collect some information for us here.
+
+  To simplify things, we don't want to manually browse our application; we don't want to hit each endpoint.
+  So now we run another performance test but instead of simulating 500 users, we can simulate 5 users or even one user 
+  just to send some requests to the backend.
+  So let's start a new test using locust.
+  
+  If you pay close attention on the locust screen, we can see that our response times are way slower than before. 
+  That's because silk is intercepting every request, getting some information, and then processing the request.
+  
+  This is enough; so let's stop the locust test.
+  Now back to dashboard of silk, refresh the page.
+  You can clearly see that the store/products endpoint is a very expensive endpoint. Here we have 13 quarries and that's 
+  because we removed the code for eager loading our products with our images. You can also see the time spent overall 
+  as well as the time spent on queries. 
+  We also have most times spent in database. So once again, we can see our products endpoint here. 
+  There's another section 'most database queries'. There's a lot of information you can spend your time figuring out how this 
+  really works. 
+  In the request page, we can see all requests sent to the server. By default, we see them listed in cards view; we can change 
+  that to rows.We can also order them by number of queries made.  
+  Now we can click on one of these requests to see more information about it. 
+  On the top we have the SQL tab; if you go over here we can see all the queries sent to the database.
+  So there is a ton of information here; so using silk we can dig deeper and find the source of the problem.
+  
+  We have clear DB section, where we can clear all the data that silk has collected; so we can run another performance test 
+  and ensure that those issues are gone.
+  
+  So that was a basic introduction to Silk. We can learn more about it by reading their documentation or simply playing 
+  with the dashboard.
+
+  
+- Verifying Optimizations
+  
+  So with silk, we identified the source of the issue. We found that that our products endpoint is sending extra queries 
+  to the database. So let's go to our ProductViewSet, and preload our products with their images:
+  
+        queryset = Product.objects.prefetch_related('images').all()
+        
+  This is where we need to run another performance test to make sure that this optimization is actually working.
+  So we're going to run a performance test; but before doing so, we need to disable silk because silk is going to add a 
+  lot of overhead; so our performance report would be going to be skewed.
+  
+  So let's go to the middleware section. Even though we conditionally added this middleware, right now because we are going to 
+  run a performance test, we need to comment out these lines, so silk is not going to mess up our performance report:
+  
+        # if DEBUG:
+        #    MIDDLEWARE += ['silk.middleware.SilkyMiddleware',] 
+        
+  Back to the terminal where we are running locust. We need to stop this locust process, and restart it to remove all the 
+  previous data.  
+  Now back to the browser, to the locust page, here we should use the same values we used earlier when we run our first 
+  performance test (500 hundred users, 10 spawn rate).
+  So we're going to run with the same parameters to ensure we have a fair comparison. Previously, we let the performance test 
+  run until we got to 500 users and then we continue running for a little bit longer so the results were stable; so overall 
+  7200 requests were sent to the server. So we want to make sure we get to the same point and then stop the test.
+  So let's start swarming.
+  
+  Now we can compare the new results to see how our optimization impact to the performance.
+
+
+  
+- Stress Testing
+
+  The last thing we're going to talk about this section is stress testing.
+  Stress testing is a special type of performance test, and we use it to find our upper limits. So we can find at what point 
+  our application fails. Knowing the capacity of our application and its execution environment is important especially if 
+  there are times of the year where we expect spikes in traffic. 
+  
+  So back in the terminal, we stop locust and restart it; so we can start fresh. 
+  On the locust page, we are going to use a high number of users because the point of this test is to break the application. 
+  (1000 users, 10 spawn rate)
+  We don't want to test this against our development server; that's really useless. You want to find our application's capacity 
+  in its production environment; so we should run this test in an environment that is similar to our production environment 
+  in terms of the capacity. Not every company can afford this; I know that; for example, imagine we have a production 
+  environment with 10 servers; so you may not be able to set up a performance testing environment with the same capacity.
+  But running a stress test at least on one server that is similar to one of our production servers is still valuable 
+  because it gives us a rough idea of our application's upper limits. 
+  For this demo, we have no choice but using our development server, which is super slow compared to a production server 
+  but let's see what happens.
+  
+  So let's choose our localhost and start swarming. 
+  We are going to wait here and see at what point we start to get failures. That is going to be our upper limit.
+  So we realized that after almost six hundred users our applications started to fail.
+  Look at the chart. This red line represent our failures. So at certain point, where we had 700 users, our application
+  started to fail. So our failure rate per second was 0.4; and, over time, this increased.
+  Now look at our RPS (request per second metric). Previously we had an average of about 140 request per second; 
+  after our application started to fail, our RPS dropped down to a lesser amount. That's a terrible situation. But now 
+  we know that the upper limit of our development server. 
+  
+  So this is all about stress testing.
+  

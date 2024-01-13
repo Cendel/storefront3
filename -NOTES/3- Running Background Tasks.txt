@@ -1,0 +1,384 @@
+
+
+- Introduction to Celery
+
+  In almost every application, we have resource intensive tasks, like processing images and videos, generating reports,
+  sending emails, running machine learning models, and so on.
+  
+  We don't want to run these tasks inside the process that runs our application because if that process is busy, 
+  it can't continue responding to client requests. 
+  
+  So we should keep this process as free as possible; and anything else that takes time, we should upload it to 
+  another process. In other words, we should run it in the background.
+  
+  So here is a real example:
+  When a user uploads a video, we don't want to process that video inside the main application process and 
+  have the user wait until we're done. Instead, we're going to kick off the video processing task in the background,
+  and quickly get back to the user, and say 'hey we are processing your video'. When we are done, we can send the user
+  a notification, and say 'your video is processed and ready'.
+  
+  So how can we do this?
+  
+  That's where we use celery, a tool that we can get from celeryproject.org. 
+  With celery, we can start several workers to execute tasks in the background. So, whenever we want to execute a long running task,
+  we send it to a queue that all these workers are watching. Each worker will pick a task from this queue, execute it,
+  and then becomes available for the next task.
+  So, with this model, we can execute many tasks in parallel. If our system is overloaded, we can easily scale our application 
+  by adding more workers.
+  The beautiful thing about this model is that these workers don't impact our main application process.
+  So, if a task is delayed or fails, our main application process is not affected; so it can continue serving clients.
+  
+  With celery, we can also schedule periodic tasks. For example, we can configure celery to run a special task 
+  every hour or every Monday at 9 am.
+
+
+
+- Message Brokers
+
+  You learned that our application communicates with salary workers through a queue.
+  We can think of a queue as a pipe between different applications. So, messages go in this queue and get processed in order.
+  
+  Now, this message queue is part of some kind of software we call 'message broker'. In English, broker means 'middlemen'.
+  Just like a broker, they are responsible for passing messages between applications in a reliable way.
+  So, if application A wants to send a message to application B, it uses a message broker.
+  If the target application, in this case application B, is unavailable, the broker will keep the message and retry later.
+  So it will guarantee to deliver up messages from A to B.
+  
+  What if the message broker itself becomes unavailable?
+  For that, we can set up a cluster of message brokers; so, if one broker goes offline, we have other brokers that can 
+  route messages from A to B. 
+  
+  So, in a nutshell, we use message brokers to reliably deliver messages between applications. 
+  And that's why we need a message broker here, so our Django application can reliably pass messages to celery workers.
+  
+  There are so many different message brokers out there. 
+  But the two most popular ones for Django applications are 'Redis' and 'RabbitMQ'.
+
+  Technically, Redis is not a real message broker; it's an in-memory data store. So we can use it as a database, as a cache,
+  but also as a message broker. 
+  RabbitMQ, on the other hand, is a real, enterprise-level message broker; so it has many capabilities that Reddit 
+  doesn't provide. But, of course, that comes with a cost; it is more complex. 
+  
+  So, in this course, we are going to use Redis because it's pretty easy to set up, and later in the course, we will use it 
+  to implement caching, which is an optimization technique that we will talk about later.
+  
+  So, we are going to use Redis both as a message broker and also as a cache.
+  
+  For your applications I also recommend you to start with Redis because it's really easy to get up and running
+  So, don't over engineer; don't assume that you should use RabbitMQ right from the get-go just because it's more powerful.
+  Start with Redis, and, if you have a valid reason that Redis is not meeting your requirements, you can always easily 
+  switch to RabbitMQ later on.
+  
+  
+
+- Installing Redis
+  
+  We can always get Redis from their website but the easiest way to run Redis on our machine is using Docker.
+  
+  Open up a new terminal window and run:
+  
+        docker run -d -p 6379:6379 redis
+
+        # 6379 is the standard port that Redis listens on.
+  
+  Now we are running Redis on our machine.
+  But we should also install  Redis as a dependency of our Django project. So in our project terminal:
+
+        pipenv install redis
+  
+  We are done with this step.
+  Now we are ready to install celery.
+
+
+- Celery and Windows
+  
+  Unfortunately salary has dropped support for Windows since version 4.
+  So if you're on Windows you have to run your Django project inside a Linux environment and for that
+  you need to use WSL (windows subsystem for Linux).
+  There is a PDF in the lesson folder that contains all the instructions to run your project inside a 
+  Linux environment.
+
+
+NOTE: At this point, I copy this workspace into a new workspace called 'storefront3 - Linux',
+and started that workspace on WSL, and continue coding there.
+
+
+
+- Setting Up Celery
+
+  Now, we're ready to install celery:
+
+       pipenv install celery
+
+  Now we need to configure it, and for that, we're going to create a new module called 'celery'.
+  
+  In the storefront folder add a new file called 'celery.py':
+
+      import os
+      from celery import Celery
+
+      # we set an environment variable called 'DJANGO_SETTINGS_MODULE', and then we specify the path to our settings module:
+      os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storefront.settings')
+
+      # next we create a Celery instance using the 'Celery' class we imported above, and give it a name ('storefront):
+      celery = Celery('storefront')
+
+      # next we need to specify where celery can find configuration variables:
+      celery.config_from_object('django.conf:settings', namespace='CELERY')
+      # 'django.conf:settings' above means that we are gonna go in the 'django.conf' module, and load the settings object.
+      # We set the 'namespace' to 'CELERY'. That means all our configurations settings should start with Celery.
+
+
+  Now we go to our settings module, and down the end define a new setting:
+  
+      CELERY_BROKER_URL = 'redis://localhost:6379/1'
+
+      # 6379 above is the port number we specified when running Redis via Docker (the default port for Redis is 6379).
+      # The number ('1') just after it is the database number. Redis provides 16 databases by default, numbered from 0 to 15. 
+      # You can select a database with a number in this range. 0 is often the default. But the instructor chose to give it here '1'. 
+      
+      
+  Finally, in celery.py, we add:
+  
+      celery.autodiscover_tasks()
+      
+      # In the next lesson, we're going to create a task, and that task is going to be in the task module.
+      # So by calling this method, we instructed celery to automatically discover all these tasks.
+      
+  
+  So, this is how we configure celery.
+  
+  Now, we need to load this module inside the __init__ module of the current package 
+  because otherwise, Python is not going to execute this code.  
+  So in the storefront folder, we have the init module. 
+  We're going to import our celery module right here:
+
+      from .celery import celery
+
+      # If we don't import this module Python is not going to see our code in celery.py.
+  
+  
+  Now the last step. 
+  We need to start a celery worker process.
+  
+  We open a new terminal in the vscode, and run:
+
+      celery -A storefront worker --loglevel=info
+      # 'storefront' above is the project's name. 
+      # then, we specified the type of process, in this case 'worker'
+      # then, for debugging and testing we set the '--loglevel' to 'info'
+      
+   You can see the 'concurrency' in the terminal, and a number corresponding to it. That is the 
+   CPU cores on our machine. So we have this number of celery workers ready to pick up tasks.
+
+   So celery is up and running, and in the next lesson, we are going to see how to create and 
+   execute a task. 
+   
+
+   Side note:
+   Before we get there, I want to emphasize something.
+   So far, we had to open two extra terminal windows; one for running Redis using docker,
+   and the other for running a celery worker process.
+   So that means. every time you want to start your project, we have to open three terminal windows.
+   One to run the web server, another to run Redis, and one more to run celery.
+   This is where Docker comes to the rescue.
+   So, instead of manually opening these terminal windows and running these commands, we can use 
+   Docker to start our project, using a single command. We will talk about that at the end of the course.
+
+
+- Creating and Executing Tasks
+  
+  Let's see how we can execute a long running task using cellery.
+  We go to our playground app, and add a new module called 'tasks.py'.
+  This is one of the modules that we instructed celery to automatically discover.
+  So, in tasks.py:
+
+      
+
+    # Here, we will define a function. Let's imagine we're going to call this function and as part of this 
+    # we're going to send 10,000 emails to our customers. This is what we simulate here.
+    # This is going to be a long running task, and we don't want to hold the main process, 
+    # so this is one of the situations where we use celery.
+      
+      from time import sleep
+
+      def notify_customers(message):
+          print('Sending 10k emails...')
+          print(message)
+          sleep(10)
+          print('Emails were successfully sent!')
+
+
+
+    # To execute this function with celery, we need to decorate it with one of the celery decorators.
+    # There are two ways to do this:
+    # First I'm going to show you that approach that most tutorials show you, but there is a problem with this approach.
+    # So, after this approach, I'll show you a better way.
+
+    # The first approach:
+    # Earlier, we created a celery module (celery.py) in the storefront folder. 
+    # We import the celery instance that we created in that module. So we import that celery object:
+      
+      from celery import Celery
+
+    # Now we can decorate this function with:
+
+      @celery.task
+
+    # So this is what most tutorials show you. But there is a problem here: 
+    # With this approach, our playground app is being dependent, or coupled, to the storefront folder.
+    # So, it's no longer going to be an independent, reusable app.
+
+    # The second approach:
+    # From the celery library that we installed, we import the shared_task function:
+
+      from celery import shared_task
+
+    # Now we can apply that as a decorator:
+
+      @shared_task
+
+    # So this is how we define a task. 
+    # Now, to execute it, let's go to the views module of the playground app. So in playground.views.py:
+
+
+      from django.shortcuts import render
+      # First we import the function that we created in tasks.py:
+      from .tasks import notify_customers
+
+      def say_hello(request):
+          notify_customers.delay('Hello')
+          return render(request, 'hello.html', {'name': 'Mosh'})
+
+
+      # Note that we did not call the notify_customers function directly. 
+      # Instead, we called the delay method on it. Then, we passed an argument: The message that we want to send.
+
+  Let's test our implementation.
+  Go to the browser and hit => http://127.0.0.1:8000/playground/hello/
+
+  As you can see, the required page is sent to the user immediately; and 'Sending 10k emails...' and our message is 
+  printed on the terminal at the same time. But only after 10 seconds, we see 'Emails were successfully sent!' printed
+  on the terminal. 
+  
+  Let me show you something really interesting:
+  On the terminal, we stop our celery worker. Our application is running but our celery workers are offline.
+  Now let's see what happens if we hit this endpoint (http://127.0.0.1:8000/playground/hello/) one more time:
+  We don't get any errors because everything is happening in the background. 
+  Our application sent a message to our broker, in our case 'Redis'; but because our workers are offline, 
+  Redis could not deliver the message to them. So the moment our workers become available, Redis is going to retry 
+  sending this message. Now start the worker and see what happens: 
+  
+  As you can see, as soon as we started a worker, the worker has done what it should do.
+  So this is why we use message brokers. 
+  Using message brokers, we can reliably send messages from one application to another.
+
+
+
+- Scheduling Periodic Tasks
+
+  Sometimes we need to schedule a task to run at a certain time, or periodically, like every Monday at 10:00 a.m. 
+  This is useful for generating periodic reports, sending emails, running maintenance jobs, and so.
+  
+  For that, we use 'Celery Beat', which is a task scheduler. 
+  So, just like your heart is beating, Celery Beat is constantly beating and kicking off tasks.
+  The actual execution of the task, though, is still done by celery workers.
+  So, Celery Beat is a process that acts as a manager, or an orchestrator.
+  
+  So let's see how we can schedule a periodic task:
+  
+  First we go to our settings module and define a new setting called 'CELERY_BEAT_SCHEDULE':
+  
+      CELERY_BEAT_SCHEDULE = {
+          'notify_customers':{
+              'task': 'playground.tasks.notify_customers',
+              'schedule': 5
+          }
+      }
+      
+    In this setting, first we defined our tasks. We defined a task called 'notify_customers'. We could call this anything but 
+    for consistency it's better to use the same name as our task function. We then set this task to a dictionary.
+    Here we should specify our task (the full path to our task (notify_customers) function).
+    Next we need to specify the schedule. 
+      
+    There are a couple of ways to set the schedule. 
+    The first approach:
+
+        'schedule': 5
+
+        # 5 means 'every 5 seconds'; 15*60 means 'every 15 minutes', and so on.
+
+    The second approach:
+    If you want to have more control over the schedule, you need to use the 'crontab' object. 
+    To use it, first we import it on the top:
+
+        from celery.schedules import crontab
+    
+    Now we can set the schedule to a crontab object:
+
+        'schedule': crontab(day_of_week=1, hour=7, minute=30)
+
+        # that means, this task should be executed every Monday at 7:30.
+        
+    Here is another way to use crontab:
+    
+        'schedule': crontab(minute='*/15')
+
+        # that means, every 15 minutes
+    
+    If you want more examples of using crontab, you need to look at celery documentation on configuring Celery Beat.
+    
+    For this demo, we are going to use:
+    
+         'schedule': 5 
+    
+    If our task function takes arguments, we can specify them here:
+        
+        'args':['Hello World']
+        
+    Optionally, if our task function takes keyword arguments, we can pass them here as well:
+    
+        'kwargs':{........}
+        
+    So, this is how we configure Celery Beat schedule.
+    
+    Now we need to start the Celery Beat process.
+
+    Back in the terminal window where we run our web server, you can see our web server is crashed.
+    So let's restart it. 
+    
+    Now we open a new terminal window, and run:
+    
+        celery -A storefront beat
+
+        # 'storefront' is the name of the project.
+        # 'beat' is the type of process.
+    
+    Now, if you look at the terminal window where celery is run, 
+    Celery Beat is kicking off our notify_customers task every five seconds.
+    
+    So this is how we can schedule periodic tasks with Celery Beat.
+
+
+- Monitoring Celery Tasks
+
+  For monitoring celery tasks, we're going to use a great tool called 'Flower' (the name comes from 'to flow').
+  First install:
+
+      pipenv install flower
+  
+  Now we need to start the flower process:
+
+      celery -A storefront flower
+  
+  The flower has started, and we can access it at => localhost:5555.
+
+      
+ 
+
+
+
+    
+  
+      
+

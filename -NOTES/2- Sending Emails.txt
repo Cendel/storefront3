@@ -1,0 +1,217 @@
+
+
+- Setting up a Fake SMTP Server
+
+  To send emails, we need an SMTP server.
+  SMTP is short for 'Simple Mail Transfer Protocol'.
+  An SMTP server is software that knows how to send and receive emails.
+  
+  In the real world we have to use a real SMTP server and quite often that cost us money. 
+  We'll talk about that later when we get to production. 
+  
+  For now, as part of our development, we need to set up a fake SMTP server. 
+  The one that I personally prefer is called 'smtp4dev' => https://github.com/rnwood/smtp4dev
+  Look at the installation instructions. 
+  So there are a few ways to install smtp4dev. 
+  
+  We prefer here installing via Docker. So paste the following command into terminal to download the image:
+
+        docker run --rm -it -p 3000:80 -p 2525:25 rnwood/smtp4dev
+  
+  Our smtp4dev server has now started. 
+  For admin panel, go to => http://localhost:3000/
+
+
+
+- Configuring the Email Backend
+
+  Now we need to configure our email backend. 
+  An email backend is essentially an engine that is responsible for sending emails.
+  
+  In Django we have a few different email backhands:
+        
+        1- SMTP backend (default), which is the default one and uses an SMTP server to send emails.
+        2- Console backend. If you use this backhend, the emails that you send will appear in the console window.
+        3- File backend, which is for writing emails to a file.
+        4- Locmen backend, which is for writing emails to local memory.
+        5- Dummy backend, which does nothing. 
+        
+  Now out of these, most of the time, we use the SMTP backend; but sometimes you might want to use the console backend.
+  
+  Now we will learn how to configure the backend.
+  
+  In the settings.py:
+  
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+        # If you use different backend other than smtp, we only change the 'stmp' part.
+        # Technically we don't even have to set the above setting but we have put it here just for reference.
+        
+        # When using an SMTP server, we should also set a few other settings:
+        
+        EMAIL_HOST = 'localhost'
+        
+        EMAIL_HOST_USER = ''
+        EMAIL_HOST_PASSWORD = ''
+        # this fake SMTP server doesn't have a user and password so we have left that empty above.
+        # Note that, in production, we don't want to store the password here in the settings file because everyone 
+        # can find that. We're gonna use environment variables to log the password. We'll talk about that in the future.
+        
+        EMAIL_PORT = 2525
+        # By default, SMTP servers run on Port 25 but because this is a fake SMTP server, it runs on Port 2525.
+        
+        # Optionally we can also set:
+        DEFAULT_FROM_EMAIL = 'from@moshbuy.com'
+        
+ 
+  So this is how we can configure our email backend.
+
+
+
+- Sending emails
+
+  Let's see how we can send emails.
+  
+  Go to our playground app and open the views module.
+  In playground.views.py:
+  
+        # we first did the following imports:
+        from django.core.mail import send_mail, mail_admins
+
+        def say_hello(request):
+            send_mail('subject', 'message', 'info@moshbuy.com', ['bob@moshbuy.com'])
+            # the third argument above is the sender, the forth is the list of recipients.
+            return render(request, 'hello.html', {'name': 'Mosh'})
+            
+    Now, this function will throw an exception if an attacker tries to modify email headers and control the 'to' and
+    'from' fields. You're probably coming across those fake emails that pretend to be from Google or YouTube or your bank; 
+    this is the situation we are talking about. 
+    So to prevent such attacks, first we need to import a class called 'BadHeaderError' :
+
+        from django.core.mail import send_mail, mail_admins, BadHeaderError
+
+    and then we should wrap the call inside a try-catch block:
+
+        def say_hello(request):
+            try:
+                send_mail('subject', 'message', 'info@moshbuy.com', ['bob@moshbuy.com'])
+            except BadHeaderError:
+                # here we can return an error to the client
+                pass
+        
+    Now let's test this implementation. 
+    Go to => http://127.0.0.1:8000/playground/hello/    and refresh the page, and look at the SMTP server admin panel.
+    Everything works.
+
+    
+    Now let's talk about sending email to site admins.
+    So this time instead of the above function, we are going to call male_admins function:
+
+        .
+        .
+        try:
+            mail_admins('subject', 'message', html_message='message')
+
+            # The signature of this function is a little bit different.
+            # We can also supply an HTML message, and this is also available in the send_mail function. What we put here can be 
+            # an HTML content but what we put in the second argument is just plain text content. In this case we used the same message.
+        .
+        .
+    
+        
+    For this to work, we need to configure our site address.
+    So we need to go to our settings module and here we define our site admins using a key called 'ADMINS'.
+    So in settings.py, we add:
+
+        # we set this 'ADMINS' key to a list of tuples. Each tuple should have two values; a name and an email:
+        ADMINS = [
+            ('Mosh', 'admin@moshbuy.com')
+        ]
+    
+    Let's test this implementation:
+    Go to => http://127.0.0.1:8000/playground/hello/    and refresh the page, and look at the SMTP server admin panel.
+
+
+
+
+- Attaching fields
+
+  What if we want to attach something to our email?
+  For that, we need to use the EmailMessage class. In playground.views.py:
+
+        from django.core.mail import EmailMessage, BadHeaderError
+        .
+        .
+        def say_hello(request):
+            try:
+                message = EmailMessage('subject', 'message',
+                                    'from@moshbuy.com', ['john@moshbuy.com'])
+                # at this point we created a folder called 'static' in playground app, and inside this 'static'
+                # folder we add a folder called 'images' and added a sample picture there. Then we passed the link here: 
+                message.attach_file('playground/static/images/aaa.jpg')
+                message.send()
+            .
+            .
+
+        
+    So if you want to have more control over your emails, like if you want to attach something,
+    or if you want to use BCC or CC features, then you have to use the EmailMessage class.
+
+  
+
+- Sending Templated Emails
+
+  So, in Django, we can send emails either using the email message class 
+  or one of the shortcut functions (send_mail, mail_admins, etc).
+
+  Now in both examples we have seen so far, our email message was just one word. 
+  In reality, that's never the case. Quite often, our emails have long text and we may also want to 
+  dynamically insert data into the email body.
+  
+  To do that, we use a library called ......... It's basically a thin wrapper around Django's mailing functionality 
+  but it allows us to store our email messages in template files.
+  
+  Here is how it works:
+  
+  First:
+        
+        pipenv install django-templated-mail
+        
+  Now we need to create an email template.
+  
+  So back to our playground app, in the templates folder, we create a new folder called 'emails'.
+  In this 'emails' folder, we create a new template called 'hello.html'.
+  
+  In playground.templates.emails.hello.html:
+
+
+        {% block subject %}This is a long subject{% endblock %}
+
+        {% block html_body %}
+        <h1>Hello</h1>
+        My name is {{ name }}
+        {% endblock %}  
+
+        # TIP: If we explicitly save this file, VSCode format and messes up our template visually. 
+        # To prevent this, do not explicitly save. The 'auto save' functionality in vscode will save this
+        # anyway, and won't mess up with it.
+
+
+  Let's go back to our view:
+  
+    We are going to use another class which is defined in the library that we have just installed:
+
+        from templated_mail.mail import BaseEmailMessage
+        # this class extends the EmailMessage class in Django, so it has all the features we have learned,
+        # for example, it has a method for attaching files, sending emails, and so on. But the constructor 
+        # is a little bit different. It doesn't have the arguments we used before.
+
+        def say_hello(request):
+            try:
+                message = BaseEmailMessage(template_name='emails/hello.html', context={'name': 'Mosh'})
+                message.send(['john@moshbuy.com'])
+
+        # As you can see, the second argument that we passed to BaseEmailMessage is context.
+        # This is a context object that we use to pass data to our template.
+        
+  Go to => http://127.0.0.1:8000/playground/hello/ and refresh the page, and look at the SMTP server admin panel.
+

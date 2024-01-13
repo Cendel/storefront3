@@ -1,0 +1,565 @@
+NOTE: I implemented the codes in this section in Windows environment, 
+      but the codes until the 'Running and Debugging Tests in VSCode'
+      are also present in the Linux environment.
+
+- What is Automated Testing
+
+  A quick introduction to automated testing and its benefits:
+  
+  So over the last 10 hours or so we have built a few endpoints for managing collections, products, carts, and orders.
+  Each of these endpoints support various operations.
+  We can create objects, we can update them, delete them, and so.
+  Some of these operations involve a bunch of rules. For example, you know that only admin users are allowed to modify products; 
+  so if an anonymous user or someone who's not an admin tries to modify a product they should get an error.
+  
+  We can manually test these endpoints in the browser. 
+  But as our application gets more complex, the time we need to manually test these functions increase exponentially.
+  Plus, over time, we're going to forget about various rules hidden behind these endpoints unless we document them in 
+  a script that a tester can use to test various scenarios.
+  
+  But, again, testing all these scenarios over and over is going to get extremely time-consuming.
+  This is where automated testing comes to the rescue.
+  With automated testing, we can write code to test our endpoints and their business rules.
+  So, we write that code once, and run it over and over.
+  Every time we change our software, or every time you will deploy it, we run hundreds or thousands of tests within seconds
+  to see if we have accidentally broken something or not.
+  
+  So, automated testing allows us to write better code and release it with more confidence.
+  
+  Some coders hates automatic testing, see it a waste of time.
+  That is understandable, because automatic testing is like a double-edged sword.
+  If you do it the right way, it can be extremely valuable. 
+  But if you do the wrong way, you're in trouble: They get in the way, they slow you down, and just make you frustrated.
+  
+  The reality is that there's a lot of bad information and poor practices about automated testing.
+  In this section, we are going to see how to write them in proper way.
+
+
+- Test Behaviours, not Implementations
+
+  One of the reasons a lot of people fail with automated testing is that they test implementations, not behaviors.
+  
+  Let's say we want to test a microwave: We press the start button, and observe the monitor. We expect the monitor to show 
+  a timer running for one minute. So this is how we expect a microwave to behave, and that's how we test it. We don't open up 
+  a microwave, and test the electrical signal going in and out of every transistor just to see if the microwave is working or not.
+  
+  Testing softwares is the same. We should test how the software behaves, not how it's implemented; because the implementation
+  may change over time. I see a lot of people testing individual building blocks on an API. like models, views, routers, 
+  serializers, and so on. Over time, your implementation may change; you may replace a function-based view with a class-based 
+  generic view, and later on you may replace that view with a viewset. Similarly, you may split your model into two different 
+  models, or combine two models into one. These are implementation details, and they may change. If you write tests for these 
+  details, your test will break as you change the implementation. Then, you have to spend a whole lot of time, fixing or 
+  rewriting these tests. That's why a lot of people fail when it comes to automatic testing.
+  
+  So remember; your test should test the behavior, not the implementation. So, they should test how an API behaves,
+  not how it's implemented.
+  
+  Let's put this in practice. 
+  Let's say, we want to test the creation of a collection.
+  So we send a post request to the collections endpoint. How does this endpoint behave? That's what we need to test.
+  
+  So here we have a few scenarios:
+    
+        If the client is not authenticated, we expect a 401 response, meaning unauthorized. (Anonymous => 401)
+
+        If the client is authenticated, but the current user is not an admin, then we expect a 403 response, meaning forbidden
+        (Non-admin => 403).  
+        
+        If the current user is an admin but the request doesn't include a collection name, then we expect 400 response, 
+        meaning bad request. (Admin && invalid data => 400) Also the response body should include an error message for the collection name.
+        
+        Finally, if the current user is an admin and the request includes a collection name, then we expect a 200 response, 
+        and the ID of the new collection should be included in the response. (Admin && valid data => 200) 
+    
+  So, this is how our collections endpoint should behave when it comes to creating a collection.
+  We can test this behavior manually by hand in the browser, or we can automate it using code.
+  Obviously, if you automate it, we can run all of our tests in a matter of seconds, and see if something has broken or not.
+  
+  So, once again:
+  Test behaviors, not implementations.
+  
+  Next, we are going to talk about testing frameworks.
+
+
+- Tooling
+
+  Let's talk about Tooling.
+  Just like we need a framework for building an API, we also need a framework for writing tests.
+  A test framework gives us a structure for writing tests, as well as a program to run our tests and give us a report.
+  
+  There are so many different testing frameworks for python applications; but the two most popular ones are:
+        
+        unittest, which is built into Python itself.
+        pytest, which we have to install separately. 
+  
+  Different people love different tools but in my opinion and a lot of other people's opinion, pytest is a better framework;
+  because it has more features; it has a huge community; it has a lot of plugins; but more importantly, it has less boilerplate;
+  so our tests will be shorter and more concised.
+  
+  So, in the terminal, first we're gonna install pytest:
+  
+        pipenv install --dev pytest
+  
+  '--dev' means that we install pytest for development dependency; so it's not dependency that we're going to deploy 
+  with our application to work. We need it only for development. 
+  
+  Now let's go to our Pipfile. You will see a section ([dev-packages]). These are th packages that that we use for development;
+  and you will see pytest right there.
+  
+  Now, to test Django applications with pytest, we should also install one of the pytest plugins for Djang:
+
+        pipenv install --dev pytest-django
+    
+  So we have installed pytest; next, we're going to write our first test.
+
+
+
+- Your First Test
+
+  Let's see how we can write our first test.
+  
+  First we go to the store app, and create a new folder called 'tests'. 
+  The name of the folder is important. That's what pytest looks for. Of course, we can configure pytest to look for 
+  something else but it's best to stick to the conventions.
+  
+  In the 'tests' folder, we add a new file. The name of the file should start with 'test_'.
+  We want to test the collections endpoint, so the name of our file is 'test_collections.py'.
+
+  In this file (test.test_collections.py):
+
+    To define a test, we create a function. The name of the function should start with 'test_'. Again, this is one of the 
+    conventions. If you don't follow this convention, pytest is not going to pick up your test.
+
+    Also it's really important that the name of your test function clearly identifies what behavior your testing.
+    Our testing scenario here is that if the user is not authenticated you should get a 401 error:
+
+
+        def test_if_user_is_anonymous_returns_401()
+
+    
+    In this module we're going to have several tests, many of them are for creating a collection, others are for deleting 
+    a collection, updating collection, and so on. So, even if it is not necessary, it's best to organize this test by 
+    use case. And for that we create a class called 'TestCreateCollection'. Again, the name of the class should start 
+    with 'Test' in order for pytest to recognize it:
+
+
+        class TestCreateCollection:
+            def test_if_user_is_anonymous_returns_401(self):
+
+    
+    Every test should have three parts. 
+    This is what we refer as AAA (triple A), which is short for 'Arrange', 'Act', and 'Assert'.
+
+    In the Arrange part, we prepare the system under test. So this is where we create objects, put our database in an initial
+    state, and so on. In this case, we just want to create a collection; so, the arrange part will be empty.
+
+    For the Act part, this is where we kick off the behavior we want to test. In this case, this is where we send a request 
+    to the server. So we need to send the request to the server, and for that, we need to import the API client class:
+
+        
+        from rest_framework.test import APIClient
+
+
+    Explanation about the next code:
+    Now, we create a client object. This APIClent class has a bunch of methods, like get, post, put, delete, and so on.
+    We're going to send a post request, so we use it here. Inside post method, first we give the endpoint where this post request
+    is made. Then, we include a dictionary as a request body. 
+    The name of the collection doesn't really matter so that's why we use a 'a' here; just to simplify it.
+    We send a request to the server, and get a response; we set it to the variable 'response'. 
+    Now the final part of the test is the Assertion part. This is where we check to see if the behavior we expect happens or not.
+    So, in this case, we expect to get a 401 response from the server.
+    So, using the 'assert' statement, we can validate this. Here we need to type a boolean expression.
+    This response object has a property called 'status_code'. We check to see if this is 401.
+    So, on the top, we import the 'status' module:
+
+        from rest_framework import status
+        from rest_framework.test import APIClient
+        
+        
+        class TestCreateCollection:
+            def test_if_user_is_anonymous_returns_401(self):
+                # Arrange part (in our case, empty)
+                
+                # Act part
+                client = APIClient()
+                response = client.post('/store/collections/', {'title': 'a'})
+                
+                # Assert part
+                assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    
+    So this is how we write tests. 
+    Every test we write, no matter what framework or language we use, should follow the same structure (Arrange-Act-Assert).
+
+    Next, we are gonna learn how to run this test.
+
+
+- Running Tests
+
+  To run our test, first we need to tell pytest where our settings module is 
+  and for that, we have to create a configuration file. so in the root folder of our project, 
+  we create a new file called 'pytest.ini'. In this file:
+
+        [pytest]
+        DJANGO_SETTINGS_MODULE=storefront.settings
+  
+  So this is our configuration file.
+  Now wego to terminal, and run:
+  
+        pytest
+        
+  As you can see, we have one passing test.
+  
+  As you have seen, it's easy to write tests but we have to make sure that these tests are testing the right thing 
+  and they're telling the truth. 
+  
+  How do we know that this test is telling the truth? 
+  Let's learn how we can ensure that this test is testing the right thing. 
+  
+  We are going to comment out the line of code that is responsible for making this test pass. 
+  So, back to our test code ('test_if_user_is_anonymous_returns_401' in test_collections.py).
+  Here we are testing that the status code of the response is 401. 
+  So let's go to our CollectionViewSet. What kind of code is generating for that 401 response?
+  It is => permission_classes = [IsAdminOrReadOnly]
+  So if we comment out that line, and by doing so do not apply a permission, anyone can create a collection.
+  
+  Now, let's run our test, and see what happens. If the test still passes, that is a lying test.
+  
+  We have an error on the terminal, saying 'Database access not allowed, use the django_db mark or.....'
+  What is happening is that => Because we don't have a permission, our API endpoint is trying to create a collection,
+  so it means a database access, and by default, pytes prevents them.
+  So we need to mark, or decorate, our test function with 'django_db' decorator.
+  
+  So back to our test module. 
+  First we import pytest => import pytest
+  Then, we decorate our test method ('test_if_user_is_anonymous_returns_401') with:
+  
+      @pytest.mark.django_db
+      def test_if_user_is_anonymous_returns_401(self):
+        
+  We can apply this decorator to each method we write, but that's repetitive.
+  So it's better to apply it to the class
+      
+      @pytest.mark.django_db
+      class TestCreateCollection:
+
+  So, all methods in this class will inherit this decorator.
+  
+  Now, back to the terminal. Let's run pytest once again.  
+  As you can see, our test has failed. Now look at the error.
+  You can see our test method on the terminal. This is the method that has failed.
+  Look at the 'assertion' part of the method. We expected a 401 response but we got 201, which means 'object is created'.
+  So, now we are 100% sure that this test was testing the right thing.
+  
+  So, back to our view, let's bring this line back => permission_classes = [IsAdminOrReadOnly]
+  and run our test one more.
+  
+  So with this test we're testing that our endpoint is behaving properly.
+  Our test knows nothing about how it's implemented.
+  
+  Now, let's look at a few more ways we're running our tests.
+  
+  If you run 'pytest' on the terminal, this is going to execute all tests in this project.
+  If we, for some reason, want to test only one of these tests, or a group of test that are in a particular folder;
+  we can specify that when we run 'pytest' on the terminal, like:
+
+      'pytest store/tests' => only runs the tests in the specified folder
+      'pytest store/tests/test_collections.py' => only runs the tests in the specified module
+      'pytest store/tests/test_collections.py::TestCreateCollection' => only runs the tests in the specified class
+      'pytest store/tests/test_collections.py::TestCreateCollection::test_if_user_is_anonymous_returns_401' => only runs 
+                                                                                        the test in the specified method
+  
+  We can also use '-k' to specify a pattern:
+
+      'pytest -k anonymous' => only runs the tests that have 'anonymous' in their name
+
+
+- Skipping Tests
+
+  When running tests, for some reason we might want to skip particular tests. 
+  
+  For this demo, let's say our test ('test_if_user_is_anonymous_returns_401') is a failing test; it keeps failing.
+  We want to skip it when testing, plan to deal with the issue later.
+  So, we can temporarily skip it by applying the following decorator:
+  
+        @pytest.mark.skip 
+  
+  
+
+
+- Continuous Testing
+  
+  There are two ways to run tests: 
+  We can run them on demand, like before committing our code to GIT or before deploying our software.
+  Or we can run our tests all the time.
+  This is what we call continuous testing. Some people love it, some people hate it because if you're on a slow machine, 
+  running all these tasks all the time might slow you down. 
+  I personally love continuous testing. I love to dedicate a separate terminal window for running my tests. I can put that 
+  on the side or on a separate monitor and as I'm coding and I can see if I have broken something or not.
+  
+  Here is how to use continuous testing in this project:
+  
+  First we have to install one of pytest plugins:
+  
+      pipenv install --dev pytest-watch 
+    
+  With this plugin installed, instead of manually running pytest every time, we can simply run:
+
+      ptw
+  
+  which is short of 'pytest watch'.
+  This runs all of our tests, and every time we change our code, it's gonna rerun our tests.
+  
+  If you don't like it, you can always run pytest manually every now then. 
+  Just remember, as a best practice you should always run your tests before committing your code to GIT and before 
+  deploying your software.
+
+
+- Running and Debugging Tests in VSCode
+
+  We can also run and debug our tests in VSCode.
+  On the left side of VSCode, click on the Testing panel.
+  First we need to configure it to pick up our tests. So click on 'Configure Python Tests' button, and select pytest. 
+  Then we select the root directory. 
+
+
+- Authenticating the User
+  
+  Let's see how we can authenticate the user.
+  In this lesson, we're going to write the test for the scenario where the client is authenticated but the current user
+  is not an admin. 
+  
+  To save time, we are gonna duplicate our existing test and make a few small changes. In test_collections.py:
+
+        def test_if_user_is_not_admin_returns_403(self):
+          client = APIClient()
+          client.force_authenticate(user={})
+          response = client.post('/store/collections/', {'title': 'a'})
+
+          assert response.status_code == status.HTTP_403_FORBIDDEN
+  
+  Now we can run our test => pytest.
+
+
+
+- Single or Multiple Assertions
+
+  Sometimes, our tests need multiple assertions.
+  For example, for this lesson let's write a test for a scenario where the client is authenticated and the current user is an 
+  admin but the data that we post to the server is invalid.
+  
+  So let's duplicate the last test, and make a few small changes. In test_collections.py:
+
+        client = APIClient()
+        
+        # Here we need to authenticate the user to a user object that is an admin. To do that, first we need to import
+        # the user class on the top (from django.contrib.auth.models import User). Then, we set the user to a real user object
+        # and here we set 'is_staff' to 'true':
+        client.force_authenticate(user=User(is_staff=True))
+        # So this is just an object in memory; it doesn't exist in database, and doesn't have to be.
+        # As long as we pass a user object here, 'force_authenticate' will take care of authenticating that user. 
+        
+        # In this test our focus is on invalid data; so to emphasize that, we set the title to an empty string in the following:
+        response = client.post('/store/collections/', {'title': ''})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # This is our first assertion but we need another assertion for the error message that we expect in the body
+        # of the response:
+        assert response.data['title'] is not None
+
+  In this test we have multiple assertions, and this is where some people get a little bit confused because there is this 
+  supposed best practice that a test should have a single assertion. I agree with this principle because the purpose of this 
+  principle is to ensure that a test should have a single responsibility. But that doesn't mean that we should have a single 
+  assert statement in the test method. In this case we have two assertions but these assertions are logically related; 
+  we're still testing the response that we get from the server. So we are not testing two separate things: Testing the 
+  status code and the body of the response are logically related. So in this case it's perfectly fine to have multiple 
+  assertions in the same test.
+
+  So your tests should have a single responsibility; they should test a single thing; but testing that single thing might 
+  involve multiple assertions as long as there are logically related.
+  
+  Now let's write another test for the scenario where the data is valid.
+  So we are going to duplicate the last test and make a few changes:
+  
+      def test_if_data_is_valid_returns_201(self):
+        client = APIClient()
+        client.force_authenticate(user=User(is_staff=True))
+        response = client.post('/store/collections/', {'title': 'a'})
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['id'] > 0
+      
+ Now let's run our tests => pytest.
+
+
+- Fixtures
+
+  Let's talk about a powerful feature in pytest called 'fixtures'. 
+  Using 'fixtures', we can remove duplication in our tests. 
+  
+  In every test we have written so far, first we had to create a client object and that means in every test module 
+  first we have to import the APIClient class so we can create a client object in each test. 
+  That is repetitive, and this is where we use 'fixtures'.
+  
+  In the test folder, we add a new file called conftest.py. This is a special file for pytest. So the 'fixtures',
+  or useable functions, that we define here. Pytest will automatically load them without us having to explicitly 
+  import this module. So in conftest.py:
+  
+      # First we import pytest and APIClient. 
+      # Then we define a function called 'api_client. To make this function a 'fixture', we apply the 'fixture' decorator
+      
+      @pytest.fixture
+      def api_client():
+      from rest_framework.test import APIClient 
+      
+  Now this function is a reusable piece of code and we can add it to each test as a parameter.
+  So back to our test module (test_collections.py):
+
+      # We delete the (client = APIClient()) line, add it to the test function as a parameter:
+      def test_if_user_is_anonymous_returns_401(self, api_client):
+
+      # So when pytest tries to execute this test, it figures out that we have a function by this name, so it will call 
+      # this function and return its value here. So in this test we'll have access to that value as api_client:
+      response = api_client.post('/store/collections/', {'title': 'a'})
+
+      # We can do the same with other test functions.
+      
+      # The second repetition is the calling the '/store/collections/' endpoint. In every test we have repeated this bit 
+      # of code => api_client.post('/store/collections/'.....
+      # The only difference is in the object that we pass to the server; sometimes we are passing a valid collection, 
+      # in other cases we're passing an invalid collectio. Let's see how we can use a fixture to simplify this code.
+      # We are not going to define this fixture in our conftest file because this file is where we define fixtures 
+      # that we're going to reuse across test modules. Creating a collection is something specific to this module
+      (test_collections.py). So we are going to define this fixture (the create_collection method) on top of this module,
+      and then call this inside our test functions.
+      
+      .
+      .
+      .
+
+      # Authenticating is also repetitive in some of the test functions, so we write a fixture (the 'authenticate' function)
+      # for that in conftest.py, and make necessary changes in related test functions.
+
+
+
+- Creating Model Instances
+
+  We are done with the tests for creating a collection; now let's write a test for retrieving a collection.
+  This one is going to be a little bit different from previous tests.
+  
+  In test_collections.py, we create a class for organizing the tests for retrieving a collection:
+  
+      class TestRetrieveCollection:
+  
+  There are two scenarios test here:
+  One is that the collection doesn't exist; in that case, we expect a 404 error.
+  The other scenario is that the collection exists; so we expect at 200 response, and the collection should be 
+  in the body of the response. This is the scenario we are testing in this lesson.
+  
+  So let's create a method, and also not forget to decorate it with => @pytest.mark.django_db:
+       
+       @pytest.mark.django_db
+       def test_if_collection_exists_returns_200(self, api_client):
+       # here we need our api_client as a parameter to send a get request to the server.
+  
+  Now this is the part that is different from previous tests. 
+  In the arrange part, we need to create a collection, so we can retrieve it later. We create a collection here 
+  because this test should not be dependent on the other test that creates a collection.
+  
+  Our tests should not have any dependency on each other. You should treat each test as if it's the only test in the world.
+  
+  So how can we create a collection? 
+  Here we have two choices:
+  
+  One option is to use our api_client to send a post request => api_client.post('/store/collections')
+  But the problem with this approach is that if there's a bug when creating a collection, this line is going to fail; 
+  so this test is gonna fail as well even though retrieving a collection might actually work.
+  
+  The other option is to use the collection model =>Collection.objects.create(title='a') 
+  Earlier we learned that when writing tests we should test up behavior and nothing the implementation.
+  This collection model is part of the implementation; it's not part of the interface of our API. 
+  So, in this case, we are violating what we learned earlier. But we don't have a better option; 
+  so it's okay to break the rules because software engineering is not black and white. 
+  Sometimes you need to break the rules, and make compromises. 
+  
+  So, here we use the collection model to create a collection.
+  
+  What if we want to create a product? As you know, our product model has a bunch of fields. Initializing all those fields
+  here would create a bit of noise in this test. But there is a better way.
+  This is where we use a fantastic library called 'model bakery'. So we install:
+  
+      pipenv install --dev model_bakery
+      
+  With model bakery installed, now we go back to the test_collections.py, and import:
+  
+      from model_bakery import baker 
+  
+  Now we continue with the 'test_if_collection_exists_returns_200' function:
+
+      collection = baker.make(Collection)
+  
+  With this approach, we don't have to initialize individual properties of this model. Baker will take care of that for us.
+  For each field, it will give it a random value depending on its type.
+
+  Let's see the collection that Baker creates for us:
+  
+      print(collection.__dict__)
+      # by typing (__dict__), we're going to access the dictionary property. So we can see individual key value pairs.
+  
+  Now, as you may remember, when writing tests, these print statements don't work unless our test fails.
+  So, in order to see this collection that we want to print, we are going to deliberately make this test fail:
+
+      assert False
+  
+  Now after starting the test, we can see the collection that Baker created for us on the terminal.
+   
+  So with model bakery, we can easily create objects. It also takes care of relationships for us.
+  For example, if we say:
+      
+      baker.make(Product)
+      
+  this will automatically create a product and a collection; because each product should be inserted into one and 
+  only one collection. So, with this single line, we'll get both a product and a collection. We don't have to explicitly 
+  create a collection before creating a product.
+  Sometimes we want to have control over the collection for a product. For example, we have a special keyword argument 
+  called '_quantity':
+  
+      baker.make(Product, _quantity=10)
+      # This will create 10 products in our database.
+      
+  But there is a problem here: Each product is going to have a separate collection.
+  What if we want to put all this products in the same collection? 
+  This is where we need to explicitly set the value of some of the field here. For example, first we can create a collection:
+
+      collection = baker.make(Collection)
+  
+  Then we use that collection to set the collection field of the product model:
+  
+      baker.make(Product, collection=collection, _quantity=10)
+
+  Now all these 10 products are going to be in the same collection.
+
+  So this is the basics of model bakery. If you want to learn more about it you need to look at its documentation.
+  
+  Let's finish up this test. So we create a collection, then in the act part, we send a get request:
+  
+      @pytest.mark.django_db
+      class TestRetrieveCollection:
+          def test_if_collection_exists_returns_200(self, api_client):
+              collection = baker.make(Collection)
+              
+              response = api_client.get(f'/store/collections/{collection.id}/')
+
+              assert response.status_code == status.HTTP_200_OK
+              assert response.data == {
+                  'id': collection.id,
+                  'title': collection.title,
+                  'products_count': 0
+              }
+  
+  So our test works.
+
+  One last thing to talk about this lesson: When we run our test, pytest will automatically create a test database for us:
+  test_our-database-name
+  When we start a test, pytest creates this database, and when it finishes our test, it drops that database.
+  So, this way, the data that is created when testing is not gonna get mixed up with the data we have in our development
+  database.

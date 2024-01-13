@@ -1,0 +1,409 @@
+
+
+- Managing Media Files
+
+  The first thing we need to do to implement upload feature is deciding where these user-uploaded 
+  files should be stored and how we're gonna serve them.
+
+  So let's create a new folder here in the root called Media you could also call it uploads 
+  it doesn't really matter but in Django Media refers to user-uploaded files. It is a term you see 
+  often in Django documentation. 
+  
+  So let's imagine all user-uploaded files are going to end up in this folder. 
+  Now we need to tell Django about this folder so let's go to our settings module. So in settings.py:
+
+        MEDIA_URL = 'media/'        
+        
+        # this is the Endpoint at which one expose our media or user-uploaded files.
+        # We should also tell Django where is media files are stored in the file system and for that:
+        # we first import os module at the top, then:
+
+        MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+  
+  In storefront.urls.py:
+
+        from django.conf import settings
+        from django.conf.urls.static import static
+        .
+        .
+
+        # and after the urlpatterns:
+            .
+            .
+        ] 
+        if settings.DEBUG:
+            urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+  
+  This strategy is good for development. For production, we are going to get a different strategy. 
+
+  Our media files are reachable at => http://127.0.0.1:8000/media/file_name_and_extension
+
+
+
+- Adding Images to Products
+
+  Let's imagine that each product can have zero or more images.
+  So we need to make a small change to uur Data model and add a one too many relationship between product 
+  and a new model called 'ProductImage'. 
+    
+  So in store.models:
+        # we define a new class:
+
+        class ProductImage(models.Model):
+            product = models.ForeignKey(
+                Product, on_delete=models.CASCADE, related_name='images')
+            image = models.ImageField(upload_to='store/images')
+
+
+        # The difference between ImageField and FileField is that ImageField validates the uploaded image and ensures it's a valid image.
+        # We also have properties that only apply to images, like width and height. 
+        # Note that with this implementation we are not going to store images in the database
+        # because that's going to make our database too big and our queries are going to be also slow 
+        # So for performance reasons we're gonna store images in our file system and we will only store 
+        # their path in the database.
+        # The path that we have specified here is relative to our Media route so in the previous lesson we 
+        # set media route to the media folder so when the user uploads an image for a product that image 
+        # is going to be stored inside that folder/store/images 
+
+
+  Because we have used ImageField here, we need to add a library called pillow:
+        
+        pipenv install pillow
+  and then:
+        migrations-migrate
+  
+  now our data model for images is ready.
+
+
+
+- Building an API to Upload Images
+
+  We want an endpoint like => /products/1/images/1
+
+  Here we have nested resources, so we're going to use a nested router to implement this endpoint.
+  
+  In store.serializers.py:
+
+        class ProductImageSerializer(serializers.ModelSerializer):
+            class Meta:
+                model = ProductImage
+                fields=['id','image']
+        
+        # we don't want to return the product right here because it's already available in the URL(/products/1/images/1)
+        # we also don't want to return the product ID in the response because it's already available in the URL 
+        
+  
+  In views.py:
+        
+        class ProductImageViewSet(ModelViewSet):
+            serializer_class = ProductImageSerializer
+
+    
+            # we don't want to return all images or all product images in the database. We only want to return the 
+            # images of a particular product. So we are gonna override the get_queryset method:
+
+            def get_queryset(self):
+                return ProductImage.objects.filter(product_id=self.kwargs['product_pk'])
+        
+        
+  In store.urls.py:
+
+        products_router.register('images', views.ProductImageViewSet,
+                         basename='product-images')
+
+  
+  At that point we test our implementation and get the following error:
+        
+        (1048, "Column 'product_id' cannot be null")
+  
+  Because our serializer needs the product_id in order to create this image.
+  So we pass the product_id to the serializer over get_serializer_context that we will define in the view set:
+  
+  So in ProductImageViewSet:
+    
+        def get_serializer_context(self):
+            return {'product_id': self.kwargs['product_pk']}
+  
+  And in ProductImageSerializer:
+
+            # we should override the create method:
+            def create(self, validated_data):
+                product_id = self.context['product_id']
+                return ProductImage.objects.create(product_id=product_id, **validated_data)
+            
+            .
+            .
+
+
+- Returning Images from the API
+
+  Currently we don't have the images in products when we return them. We don't want the client to repetitively hit separate 
+  endpoints for getting the images of each product; that's way too expensive and slow. 
+  So when returning the list of products we want to return their images as well.
+
+  So in ProductImageSerializer, we are gonna add the images field:
+
+        # we first define the images field:
+
+        images = ProductImageSerializer(many=True, read_only=True)
+
+        # we should also set read_only to true because when creating a product we don't want to pass multiple images we only 
+        # want to pass properties related to a product object.
+    
+  
+  We tested our implementation but there's one issue here.
+  Open Django debug toolbar and look at the SQL tab so we have 14 quarries and many of this queries as you can see are 
+  duplicate because for each product Django is now going to the database to fetch its images so we need to eager load our 
+  products with their images.
+  
+  So in ProductViewSet, we change this code => queryset = Product.objects.all():
+
+        queryset = Product.objects.prefetch_related('images').all()
+  
+        
+
+- Validating Uploaded Files
+
+  In the ProductImage class in models, look at the ImageField.
+  As we learned earlier, the ImageField validates the uploaded file and raises an error if it's not a valid image.
+  So if you try to upload a document or a PDF we're going to get an error and that's why we had to install pillow 
+  because pillow is an image processing library for python. 
+  So under the hood this image field class uses pillow for validating the incoming image.
+  
+  But what about the file size? Currently there is no built-in validation for that.
+  So we need to create it from scratch.
+  
+  First, in the store app let's add a new file called validators.py. In this file:
+
+        from django.core.exceptions import ValidationError
+
+        def validate_file_size(file):
+            max_size_kb = 500
+
+            if file.size > max_size_kb * 1024:
+                raise ValidationError(f'Files cannot be larger than {max_size_kb}KB!')
+  
+  So now we have a validator function. 
+  Now we're going to go back to our model and there we're going to set a keyword argument called validators.
+  In ProductImage model:
+
+        from store.validators import validate_file_size
+        .
+        .
+        class ProductImage(models.Model):
+            image = models.ImageField(upload_to='store/images', validators=[validate_file_size])
+  
+
+  This is all about validating the file size.
+  
+  In Django we can also validate the file extension and that is useful or actually essential if you are using a file 
+  field. So if you're using a file field perhaps you want to restrict the client to uploading. 
+  django.core.validators have a method named FileExtensionValidator. You can use it when you need.
+
+
+
+- Setting Up the Client App
+
+  In this lesson, we set up a very basic client up for uploading files. (Look at the app 'storefront3_client')
+  This is a very basic JavaScript project for uploading files. 
+  The instructor created this project for fullstack developers to see how everything comes together both, 
+  the client side and the server side.
+  We open this project in vscode. To start this project first we need to install our project dependencies.
+  So we type 'npm install'. We get a bunch of warnings ignore.
+  The next step is to run 'npm start'.
+  This starts a web server at localhost:8001.
+  
+
+
+- Enabling CORS
+
+  Let's see what happens if we try to upload an image using our client app.
+  We get an error saying could not reach the server. 
+  Why is this happening? 
+  This is a common security measure that is implemented in all browsers. 
+  It is called 'CORS', which is short for 'Cross-origin Resource Sharing'.
+  In practical terms, this policy prevents an app hosted on one domain from sending a request to an app hosted on another domain.
+  So in this case, we have this client app hosted on Port 8001 trying to send a request to our app hosted on Port 8000.
+  (NOTE: The instructor, who created this client app by himself before, send an api request to http://127.0.0.1:8000/store/products/1/images/
+  in index.js file of the client app.)
+  So even though both these apps are hosted on the same machine, Chrome sees them hosted on different domains and that's where 
+  the 'CORS' policy kicks in and prevents this request from reaching the server.
+  
+  In order to solve this problem, we need to go to our backhand and do a bit of configuration so that requests coming from 
+  this address are not blocked. 
+  
+  In order to implement this, we're going to use a library called 'django-cors-headers'.
+  So go to => https://github.com/adamchainz/django-cors-headers/tree/main
+  On this page, you can find the installations instructions.
+  First we will install 'django-cors-headers', then add it in the list of install apps, next register in middleware,
+  and this middleware should be placed as high as possible. And finally, we will specify what origins or what domains 
+  can send requests to our backend.
+  
+  First:
+        
+        pipenv install django-cors-headers
+  
+  Then, in settings.py, register the corsheaders app:
+        
+        'corsheaders',
+  
+  Next, in settings.py, register a middleware at the top of the middlewares:
+
+        "corsheaders.middleware.CorsMiddleware",
+  
+  Finally, we specify what origins can send requests to our backend. Somewhere in settings.py:
+
+        CORS_ALLOWED_ORIGINS = [
+            'http://localhost:8001',
+            # we also prefer to use the numeric representation of the localhost and the port:
+            'http://127.0.0.1:8001'
+        ]
+
+  We are done. Now test the implementation and try uploading a file over the client app.
+
+
+
+- Managing Images in the Admin
+
+  The last thing we're going to talk about in this section is managing product images in the admin interface.
+  So let's go to the list of products in the admin panel and pick one of our products, look there's currently no way 
+  to manage our product images here. So similar to 'tags', we want to show our product images right here. 
+
+  Do you remember where we implement this?
+  We have two instances of ProductAdmin. We have one class that is defined in the store app and another one in the core app.
+  The first one is the reusable part so any project that uses the store app is going to use an admin class. The other one 
+  that is defined in the core app is the part that is very specific to this project; it basically combines features from 
+  different apps. 
+  So in core.admin.py, let's take a quick look here.
+  In the CustomProductAdmin class, we have inlines that was set to a list and in this list we have Taginline which is defined 
+  in the TagInline class just before this CustomProductAdmin class.
+  So to show the product images, first we need to define an inline class, and then we need to register it in CustomProductAdmin.
+  But where do you think is the right place to define the inline class? We don't want to define it here because this is the 
+  core app; this is very specific to this project. We should define it in the store app because the product image class is 
+  defined in the store app. So any project that uses this app should also have the capability to manage product images 
+  and the admin interface.
+  
+  So in store.admin.py:
+    
+        # just before the ProductAdmin class, we define an inline class:
+        class ProductImageInline(admin.TabularInline):
+            model = models.ProductImage
+  
+        # Now we need to register this in ProductAdmin class:
+
+        class ProductAdmin(admin.ModelAdmin):
+            .
+            .
+            # we define a new attribute called 'inlines':
+            inlines = [ProductImageInline]
+            .
+            .
+  But there is a problem here. Let's go back to our CustomProductAdmin class in core.admin.py. Look, this class extend our 
+  ProductAdmin class in store.admin.py; and here we are overriding the inlines attribute, so whatever we set in ProductAdmin class
+  is going to be lost here. 
+  So in the core app, we should also add ProductImageInline in this list.
+  In core.admin.py:
+
+        class CustomProductAdmin(ProductAdmin):
+            inlines = [TagInline, ProductImageInline]
+
+  Now you can see the list of product images => http://127.0.0.1:8000/admin/store/product/648/change/
+  
+  But currently we only see the path.
+  Wouldn't it have been nicer if you could see a thumbnail of each image?
+  Let's see how we can implement this.
+
+  Back to our ProductImageInline class, here we need to set an attribute called 'readonly_fields' to a list and in this list 
+  we add 'thumbnail'.
+  So in the ProductImageInline class in store.admin.py:
+
+        class ProductImageInline(admin.TabularInline):
+            model = models.ProductImage
+            readonly_fields = ['thumbnail']
+
+            # but 'thumbnail' is not one of the fields of the ProductImage class, so we need to define it as a method here:
+            
+            def thumbnail(self, instance):
+                if instance.image.name != '':
+                    return f'<img src="{instance.image.url}"/>'
+                return ''
+
+            # Here is what we did in this thumbnail method:
+            # We gave it two parameters; the first one is 'self' because this is a method of this class; the second parameter 
+            # is an instance of the product image class. So we're going to take that product image and convert it to an HTML image.
+            # A product can have zero or more images so we needed to set a condition for that here.
+            # If we do have an image we're gonna return an HTML image tag and give it a source attribute. We should set the 
+            # source of this image to the URL of our image. Otherwise if we don't have an image, returned an empty string. 
+            
+
+  Let's see what happens, so go to => http://127.0.0.1:8000/admin/store/product/648/change/
+  Now we don't see the actual image; we see the image tag rendered as a string.
+  
+  So to solve that, in store.admins.py, we need to use the format_html function from Django.
+  We already imported it before (from django.utils.html import format_html).
+  Then in ProductImageInline class:
+
+        # we are gonna pass wrap our code in  the format_html function:
+
+            return format_html(f'<img src="{instance.image.url}"/>')
+  
+  go to => http://127.0.0.1:8000/admin/store/product/648/change/
+  Now we have the image but this image is way too big. We wanted to show a thumbnail. So this is where we use CSS. 
+
+  So back to our HTML tag in the ProductImageInline class:
+  
+        # After the source attribute, we should also set the class attribute to a class called thumbnail.
+        # This is a css class that we're going to define in a minute:
+
+            return format_html(f'<img src="{instance.image.url}" class="thumbnail"/>')
+        
+  Now let's define this thumbnail class.
+  First, in the store app we create a new folder called 'static'.
+  This is a special folder for Django.
+  So when our project starts, Django web server goes through every installed app and it will collect all the static files 
+  from this 'static' folder.
+  So in this 'static' folder, we add a file called 'styles.css'. 
+  So this file is a static asset. It's part of our project. Other static assets can be images and JavaScript.
+
+  But there's one problem in this implementation.
+  As we said, when our project starts, Django web server is gonna look at the static folder of every installed app 
+  and it's going to collect our files.
+  So that means, if you have another file with the same name in another app, one of this files is going to overwrite the other file. 
+  
+  So this is why we need to namespace these files. So inside the static folder in the store app, we create a new folder 
+  called 'store', and then move our CSS file (styles.css) right here.
+  
+  So in this styles.css file, we're going to define a CSS class:
+
+        .thumbnail {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            }
+
+
+  and in ProductAdmin class in store.admin.py:  
+
+        # we define a class called 'Media' inside the ProductAdmin class: 
+
+        # With this Media class, we can specify the static assets that should be loaded on the ProductAdmin page. These assets
+        # can be CSS or JavaScript files.
+        #  so here we set CSS to a dictionary in this dictionary we add one key value pair the key is going to be all.
+        # What is 'all' here? In CSS, we have the concept of Media type, for example we have 'screen', with which we can apply 
+        # styles that only apply to screens. We also have 'print', with which we can define styles that will only be applied 
+        # when printing a page. But when we use 'all', these styles will be applied everywhere.
+        # So this is how we can load our style sheet or css file on the ProductAdmin page:
+
+        class Media:
+            css = {
+                'all': ['store/styles.css']
+            }
+
+  
+  Now our implementation works.
+  So this is how we can manage product images in the admin interface.
+ 
+  
+
+
+   

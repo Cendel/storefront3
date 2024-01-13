@@ -1,0 +1,141 @@
+
+In this section, we will talk about caching which is a performance optimization technique.
+
+
+
+- What is Caching
+  
+  If you have a complex query that takes a while to execute, you can use caching to boost our application's performance.
+  So the first time the query is executed on the database, then we get the result, and store it in the memory.
+  
+  Getting the data from the memory is often, but not always, faster than getting it from a database.
+  So we'll serve subsequent requests using the data in the cache. So the future requests will have a shorter response time 
+  and our web and database servers will be freed up to process more requests.
+  
+  On the surface, that sounds great; but there is a problem with caching.
+  The problem is that if the data in our database gets updated, our cash is not going to get updated. So the data is going to 
+  be stale or out-of-date until the cash expires. Typically when we store an object in the cash, we can put an expiration time 
+  on it, like five minutes or three hours, depending on how frequently the data gets updated. So if the data gets updated 
+  frequently and we should always show the most up-to-date data to the user, then there is really no point storing it in the 
+  cache. 
+  
+  Caching is not limited to the result of database queries. For example, you might have to call a third party API to get some 
+  data. If that API is slow or even becomes unavailable, we can improve our applications performance by storing the result 
+  in the cache. We can also run a celery job to update the cash in the background every now and then.
+  
+  So, overall, caching is a great optimization technique but as we always say: Too much of a good thing is a bad thing.
+  So if you cash data aggressively, you will need a lot of memory, and that's going to cost you a fair bit.
+  But also caching may even reduce the performance of your application; so don't assume that just because reading data from 
+  the memory is faster than reading it from the disk, you should always store your data in the cache.
+  Some data queries get executed pretty quickly, and your application will respond faster if you simply get the data from the 
+  database every time. The only way to know this is by running a performance test before and after optimization.
+  So don't make assumptions without a proper performance test. Again this old saying: 
+  Premature optimization is the root of all evil.
+  
+
+- Cache Backends
+  
+  Django comes with various types of cache backends, or cash engines:
+        
+        Local memory (default), which stores data in the same process that runs are Django application. 
+    
+    Local memory is good for development but not a good choice for production. In a production environment, we should use 
+    a proper caching server. And for that:
+        
+        Memcached 
+        
+        Redis
+        
+    Both of these are enterprise cache server; so you can choose either. 
+    In this course, because we have been using Redis as our message broker, I prefer to use it as our cash backend as well;
+    so we don't have too many dependencies.
+
+        Database
+    
+    We can also use our database as a cash; so if you have a complex query that hits multiple tables and takes a while to 
+    execute, then we can store the result in the database and quickly pull it out for subsequent requests. This is faster 
+    than executing that complex query every time; but it's not as fast as pulling out data from the memory. 
+    
+        File system
+    
+    We can also use the file system as a cache; so the result is stored in files. This is not something I've used that often 
+    but it's there in Django in case you need it.
+    
+  So that's all about cache backends. All these backends, except Redis, come with django by default.
+
+
+
+- Simulating a Slow API
+
+  For this section, we are going to simulate a slow API endpoint.
+  
+  Let's go to the say_hello view of the playground app, and make a couple changes:
+
+
+        from django.shortcuts import render
+
+        # we import requests module built into python, and using this module we can send an HTTP request to another service: 
+        import requests
+
+
+        def say_hello(request):
+            # we send a request:
+            response = requests.get('https://httpbin.org/delay/2')
+            # When we hit this endpoint, the server is going to wait two seconds to respond to us. So the simulates a slow 
+            # third-party service. 
+            
+            return render(request, 'hello.html', {'name': 'Mosh'})
+        
+        
+  Now let's test this. So back in the browser, let's go to => http://127.0.0.1:8000/playground/hello/
+  As you can see, we're waiting for two seconds, and then we got the response.
+
+
+- Getting a Baseline Performance Benchmark
+
+  Now we are going to run a performance test to collect our baseline.
+  So let's go to the locustfiles folder, and open our test script (browse_products.py). We're gonna define a new task for 
+  hitting our slow api endpoint:
+        
+        @task
+        def say_hello(self):
+            self.client.get('/playground/hello/')
+            
+  Now in the terminal, let's restart locust (500 users, 10 spawn rate).
+  Let's make the test continue until we send about 7,000 requests to the server.
+  After stopping the test, look at the first row or the hello Endpoint. 90% of our users better response in 3900 milliseconds,
+  or less; and our total aggregated metric is 3000. So let's keep this report somewhere; so after we implement caching, 
+  we can compare the metrics.
+
+
+- Installing Redis
+  (I have already installed it in previous section.)
+
+- Configuring Caching
+  
+        pipenv install django-redis
+  
+  Then go to => https://github.com/jazzband/django-redis    in order to grab a piece of code from there.
+  That is our cache configuration. In settings.py:
+
+        CACHES = {
+            "default": {
+                "BACKEND": "django_redis.cache.RedisCache",
+                "LOCATION": "redis://127.0.0.1:6379/1",
+                "OPTIONS": {
+                    "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                }
+            }
+        }
+        
+        
+  So we are defining our default cache. As you can see, the backend is that is "django_redis.cache.RedisCache".
+  The location is the location of the redis server ("redis://127.0.0.1:6379/1").
+  Here we're using database 1; but earlier we used database 1 as a message broker for celery. remember that so if you use a different database for cash alright so our configuration is ready next I'm going to show you how to use the casual
+
+
+
+
+- Using the Low-level Cache API
+
+let's talk about using the low level cache API so back to our playground view from django.core.cash we're really important the cash object now this object has an API for accessing the cash so it has methods for getting obvious from the cash or scoring them in the cash so in this video instead of immediately calling HTTP we're going to check our cash and see if we have the data we are looking for if we have the data then we're going to serve this request using data from the cache otherwise we're going to call a certificate to get the data and then we'll store the data in the cache or subsequent requests so here we're going to say if cash that get now here we need to pass a key for accessing the data we are looking for you can call that key anything I'm going to say httpn online result now if this is not that means we don't have to date on the cache so then we're going to call httpane to get the data so here we're going to respond then the color response the json and store the result in data next we call cash.set to store the data in the cache now here we need to pass a key and a value so for the key we're going to use the same value as before and the value is the data now we have repeated the key in two places so if you have a typo or code is not going to work so a better way is to store the key in one place HTTP bin under like result and then we can replace both this instances with key okay so if we don't have the data in the cache we're going to get it storage otherwise we're going to serve this requires using the data from the cache so instead of rendering my name on this template I'm going to render cash key okay now back to the browser the first time we hit this Endpoint our request is going to be slow is going to take two seconds but also sequin requests for the surf from the cash so they will be super fast take a look so one and two and we got the result this is the json object that we get from HTTP I'm going to refresh this one more time look we got the result immediately you might be wondering how long the data is going to store in the cash but default timeout is 500 or 300 seconds but we can easily change this so when storing the state line the cache here we can supply a timeout let's say 10 times 60 so that's going to be 10 minutes alternatively instead of repeating this everywhere we can set the timeout globally so we go to our cash configuration setting and set the timeout right here so set time out to let's say 10 times 60 okay so using the low level cache API by calling the get and set method we have precise control over cashing Optics by using the API in every view that is caching is going to be a little bit tedious it's gonna be repetitive every time we have to define a key then repeat logic like this so in the next lesson I'm going to show you a simpler way to cash data
