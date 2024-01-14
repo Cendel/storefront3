@@ -1,6 +1,3 @@
-NOTE: I implemented the codes in this section in Windows environment, 
-      but the codes until the 'Running and Debugging Tests in VSCode'
-      are also present in the Linux environment.
 
 - What is Automated Testing
 
@@ -92,9 +89,8 @@ NOTE: I implemented the codes in this section in Windows environment,
         unittest, which is built into Python itself.
         pytest, which we have to install separately. 
   
-  Different people love different tools but in my opinion and a lot of other people's opinion, pytest is a better framework;
-  because it has more features; it has a huge community; it has a lot of plugins; but more importantly, it has less boilerplate;
-  so our tests will be shorter and more concised.
+  pytest is a better framework; because it has more features; it has a huge community; it has a lot of plugins; but more importantly,
+  it has less boilerplate; so our tests will be shorter and more concised.
   
   So, in the terminal, first we're gonna install pytest:
   
@@ -103,10 +99,10 @@ NOTE: I implemented the codes in this section in Windows environment,
   '--dev' means that we install pytest for development dependency; so it's not dependency that we're going to deploy 
   with our application to work. We need it only for development. 
   
-  Now let's go to our Pipfile. You will see a section ([dev-packages]). These are th packages that that we use for development;
+  Now let's go to our Pipfile. You will see a section ([dev-packages]). These are the packages that we use for development;
   and you will see pytest right there.
   
-  Now, to test Django applications with pytest, we should also install one of the pytest plugins for Djang:
+  Now, to test Django applications with pytest, we should also install one of the pytest plugins for Django:
 
         pipenv install --dev pytest-django
     

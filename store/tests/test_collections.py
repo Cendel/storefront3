@@ -14,7 +14,7 @@ def create_collection(api_client):
 @pytest.mark.django_db
 class TestCreateCollection:
     def test_if_user_is_anonymous_returns_401(self, create_collection):
-        # Arrange part (in our case, empty)
+        # Arrange part (in this case, empty)
 
         # Act part
         response = create_collection({'title': 'a'})
