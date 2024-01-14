@@ -25,7 +25,7 @@ We're gonna throw a few hundred users on our application, and see how it perform
   business. In our application, the core use cases:
   
         * browsing products
-        * Register, Ssign in, sign out
+        * Register, Sign in, sign out
         
   In our project's root folder, we create a new folder called 'locustfiles'; the name does not matter.
   In this folder, we add a new file called 'browse_products.py'; that's the use case we're going to test.
@@ -70,7 +70,7 @@ We're gonna throw a few hundred users on our application, and see how it perform
         
   
   When we run this test, for each url that ends with different collection_id, we're going to have a separate row
-  in the report, and this is going to make our report to verbose. So here we need to add all these urls to a particular 
+  in the report, and this is going to make our report too verbose. So here we need to add all these urls to a particular 
   group to simplify our report. We will see that in the next lesson. And for that, we set the name argument:
 
         self.client.get(
