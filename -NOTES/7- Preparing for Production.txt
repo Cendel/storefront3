@@ -1,0 +1,160 @@
+
+
+In the section, we'll be talking about the necessary steps to prepare our application for production.
+
+
+- Adding the Home Page
+  
+  Currently we don't have a homepage. Let's quickly add a homepage for this project.
+  
+  Go to the core app and here we need to add a new file called 'urls.py'.
+  To save time, we go to playground.urls.py, and borrow some code. 
+  
+  So, in core.urls.py:
+  
+        from django.views.generic import TemplateView
+        from django.urls import path
+
+        # URLConf
+        urlpatterns = [
+            path('', TemplateView.as_view(template_name='core/index.html'))
+        ]
+    Some explanation about the above code:
+    We need to add path for the root endpoint.There's really no need to create an explicit view here; we can use one of the generic 
+    views in Django to render a template. So, on the top, we import from 'django.views.generic import TemplateView'.
+    Now, instead of referencing one of our views, we're going to reference 'TemplateView'. We pass 'core/index.html' as the 
+    template name.
+
+  Now, let's create this 'index.html'.
+  
+  In the core app, we create a new folder called 'templates' and another new folder called 'core' in this folder, 
+  and here we have index.html. For now, we just want to create a basic HTML template: 
+        
+        # So, type an exclamation mark, and press enter:
+
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Document</title>
+        </head>
+        <body></body>
+        </html>
+  
+    
+  So that's a basic HTML template.
+  
+  Now, we need to bring this url pattern in the main url's module of our application.
+  So, storefront.urls.py, we define a new path:
+
+        path('', include('core.urls')),
+  
+  Now let's test our implementation. Go to => http://127.0.0.1:8000/
+  As you can see, we have an empty page.
+  But we're not done here; in the next lesson, we will improve this and make it pretty.
+
+
+
+- Adding Static Assets
+  
+  Let's make our homepage pretty.
+  
+  If you look at the zip file that I gave you at the beginning of the course; we have a folder called 'static files',
+  and here we have two files: an SVG file, which is our logo, and a CSS file. In Django, we refer to this files as 'static';
+  so static files are images, style sheets, and JavaScript files that we bundle with our application.
+  So we're going to add these to our project so our homepage becomes beautiful.
+  
+  In the core app, create a new folder called 'static' and another new folder called 'core' in this folder, 
+  and then drag and drop these two files right there.
+  
+  Now go to our template (index.html). First of all, we have to use a special tag to load our static assets.
+  So, on the top, we use a special tag called 'load' for loading static assets:
+  
+        {% load static %} 
+  
+  Next, in the head section, we reference our style sheet:
+  
+        <link rel="stylesheet" href="{% static 'core/styles.css' %}" /> 
+  
+  In the 'body' section, we need to type a bit of HTML code:
+  
+        <div class="home-page">
+            <img src="{% static 'core/logo.svg' %}" alt="Logo" class="logo" />
+        </div>
+    
+  Now back to the home page, refresh; here is our new homepage.
+  
+
+- Collecting Static Assets
+
+  In the previous lesson, we added a couple of static files to the core app, and everything magically worked.
+  But you really need to understand what happens under the hood because later, when we talk about deployment, you're going to 
+  face some issues if you don't understand how static files are served in Django.
+  
+  So, a quick background:
+  
+  When you're in development mode, when debugging is turned on, Django goes to every app, and if there is a static folder, 
+  Django is going to copy all this content to a special folder on disk. So, all these folders, all these static folders, 
+  from different apps are going to be copied into a single bucket. 
+  
+  This is not going to work in production. It only works when debugging is turned on. For production, we have a special command 
+  for collecting static files from different apps. 
+  
+  But, for that to work, first we have to configure a setting. 
+  So go to the MEDIA_ROOT in settings.py:
+        
+        # MEDIA_ROOT is the full path to the folder that contains user uploaded files. We take all these files, and serve them 
+        # from this endpoint. We have the same concept for static files. As you can see, we already have STATIC_URL for serving 
+        # static assets; and we need also to configure the STATIC_ROOT setting; so Django will know where our static assets are 
+        # located on disk:
+        
+        STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+        
+  With this setting, now we can explicitly collect static files from different apps.
+  So, in the terminal we run:
+        
+        python manage.py collectstatic 
+  
+  Our static files were copied to this folder => '......MyCourseFiles\storefront3\static' 
+  Now we have a new folder called 'static' in the root folder; and this contains all the static files from different apps; these 
+  apps are all the apps that we have listed in our settings module. So if you forget to include an app there, running 
+  'collectstatic' is not going to copy the static files of that app for you.
+  
+  So, in production, every time we deploy, we should run this command (python manage.py collectstatic) in order to collect 
+  static files from different apps.
+  In development, we are not going to use this command; we don't want all the static files to end up in our github repository.
+  So, in .gitignore, we add this file to exclude it from our github repository:
+  
+        /static/
+   so I'm going to add the study folder here and Now none of those files are tracked anymore
+
+
+- Serving Static Assets
+
+
+Django doesn't support serving static files in production so even though we have a command for collecting the study files we cannot serve them to add this feature to Django you have to install a library called white noise so here in the terminal varan pn install white noise all right good now we should go to our middle of our setting and add white noise middleware this middleware should be as high as possible but it should come after security middleware so right after this we're gonna add white noise dot middleware dot white noise middleware it close attention to spelling in capitalization of these letters so that's all we have to do with this simple change now we can serve starting assets in production
+
+
+
+- Configuring Logging
+
+
+talk about is configuring logging which is an important and flexible technique for diagnosing problems so later after we deploy your application if some feature is not working we can look at our log file and troubleshoot issue now the first step is configuring logging so here in our settings module we define a new setting called logging and search a dictionary now this dictionary we should always add a couple of keys one of them is version which we set to 1 the other is disabled underlined existing online Loggers as a best practice we should always set this to false because there are other Loggers that come with Django or other libraries we use we don't want to disable them we want to capture everything that comes with them okay so we set this to a keys then we define NUC called handlers with handlers we determine what you want to do with block messages do you want to write them to the console or to a file so here we can define one or more defined one handler called console and centred predictionary now here we set the class to be going the login module of python and reference stream handler so with this class we can write lot messages to the console now similarly we're going to define another handler called file and in this dictionary once again we set the glass to logging that file and we should also specify the name of the file so we set file name to let's say general dot so now we have two handers next we define another key called Loggers like here we can define one or more Loggers for example we can define a logger for the playground app and this will capture any log messages sent from this app or we can be more specific and define a logger called playground that views this will only capture log messages sent from a smarter if you remove the name of the logger and use an empty string this will capture all messages from all apps so this log in framework gives us a lot of flexibility that most of the time we don't want to have different Loggers for different apps that's really unnecessary so here I'm defining a logger to capture all log messages in our project now in this dictionary to specify the handlers so once we capture is log messages what do you want to do with that let's say you're gonna write them to the console and a file so here we reference the handlers that we defined earlier okay so console and fun now with this login framework we can define different Loggers and say anything raised in the playground app should be written to the console but anything raised from the store app should be written to both console and a file so once again we have a lot of flexibility the next thing we need to specify here is the level of log messages so log messages have a level or severity so we have debug info warning error and critical so as we go down this list is severevalog message increases it becomes more important now when defining a logger we need to specify a level and this longer will only capture log messages at this level or higher
+
+
+
+for example if I said this to error this will only capture error and critical messages so debug info and warning messages are not captured okay now here we don't have to hardcode a particular level like error we can use an environment variable and this gives us further flexibility for example here we can say OS that environment variable that get so we can read an environment variable called Django on the line log level if this is not set we can assume let's say info by default now with this implementation we can go to our production server and set this environment variable to capture different types of messages so this is how we configure a logger now optionally we can also specify a formatter so we can define one or more formatters here with a formatted with specify how long messages should be formatted for example we can define a simple formatter that shows only the method and in addition to that we can define another formatter that shows more information about allotment so let's add variables to a dictionary now here we need to set a couple of keys the first one is the format of our log messages now this log messages have different attributes so if you google Python logging log record attribute you will find this page in this table you can see all attributes of the log record class for example we have file name font name level name and so on so when writing to our log file let's say I want to start with the daytime of the log message so here we add curly braces and I have ASC time that's an attribute of the lock record okay after that let's say in parenthesis we want to show the level name is it a warning and error critical error of y so for that yeah level name let's say then you want to add a high fan and specify the module that this log message was raised from followed by the log message okay so this is the format and we can configure it anyway we want to then we specify the style now if you set this to the left brace this will translate to strength so the string that we have specified here will be passed to string the format the other option is to use a dollar sign and this will use string the template glass so if you have a preference over how you want to format strings you can specify that here in this lesson you're going to use a left brace so that would translate to string does format okay that's pretty much it this is how we can configure logging now let's see how we can write log messages
+
+
+
+
+- Logging
+
+
+
+- Managing Development and Production Settings
+
+
+
+- Serving the Application with Gunicorn
