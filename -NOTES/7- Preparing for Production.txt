@@ -238,5 +238,30 @@ the next reference is in Pi test.ini so for our tests we want to load our develo
 
 - Serving the Application with Gunicorn
 
+  So far, we've been using the development web server that is built into Django; this is great for development because 
+  every time we change our code this web server automatically restarts our application; but this server is only meant 
+  for development.
+  
+  In the production environment, we need a fast and robust web server; and for that we're going to use 'gunicorn', 
+  which is short for 'green unicorn'. This web server is a lot faster:
+        
+        pipenv install gunicorn
+  
+  Now, to start our application with gunicorn, we need to specify the name of a special module in our application. 
+  In the storefront folder, we have a file called 'wsgi.py'; wsgi is short for 'Web Server Gateway Interface'.
+  
+  So, in this file, as you can see, there is an environment variable with a default value (in this case; 'storefront.settings.dev'); 
+  and then, as you can see, we call 'get_wsgi_application()' to get an application instance. So, when launching our application with gunicorn,
+  we need to a specify this module as the entry point. 
+  
+  So, in the terminal:
+  
+        gunicorn storefront.wsgi
+  
+                        NOTE: gunicorn is not supported in Windows. So, above code returns error in Windows. But there is no worry about this 
+                        because gunicorn is only for production. In our development environment, we will continue using the development server.
 
-so far we've been using this development web servant that is built into Django this is great for development because every time we change our code this web server automatically restarts our application but this server is only meant for development in a production environment within a fast and robust web server and for that we're going to use g unicorn which is short for green unicorn so let's stop this process I'd run and install g unicorn alright that will start our application with geonicorn we run gionicorn and then specify the name of a special module in this application let me show you what that is so back to our project look candlestore front folder we have a file called double sgi.p this is also called whiskey wsgi is short for web server gateway interface so in this file first we're giving this environment variable at default value in this case storefront the settings of the f and then we call get whiskey application to get an application instance so when launching our application with geonicorn we need to a specify this module as the entry point so back to the terminal we type storefront.wsgi so we're going to the storefront folder and loading whiskey module now take a alright so you started a web server at this address localhost for 8,000 exactly like before but this web server is a lot faster than the development server that comes with Django so let's go to this address is our homepage beautiful now one thing you need to know about geonicorn is that unlike the development server that comes with Django g unicorn doesn't take changes in our code so if you make any changes we have to manually restart our web server now we don't have to worry about this because as I said geonic is only for production in our development environment will continue using the development server
+  So, we started a web server at this address => http://127.0.0.1:8000, exactly like before but this web server is a lot faster. 
+  One thing we need to know about gunicorn is that, unlike the development server, that comes with Django,  gunicorn doesn't take changes in our code 
+  automaticall; so, if you make any changes, we have to manually restart our web server. Now, we don't have to worry about this because gunicorn is 
+  only for production. In our development environment, we will continue using the development server.
