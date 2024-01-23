@@ -245,7 +245,7 @@ the next reference is in Pi test.ini so for our tests we want to load our develo
   In the production environment, we need a fast and robust web server; and for that we're going to use 'gunicorn', 
   which is short for 'green unicorn'. This web server is a lot faster:
         
-        pipenv install gunicorn
+        pipenv install gunicorn 
   
   Now, to start our application with gunicorn, we need to specify the name of a special module in our application. 
   In the storefront folder, we have a file called 'wsgi.py'; wsgi is short for 'Web Server Gateway Interface'.
