@@ -236,7 +236,7 @@ the next reference is in Pi test.ini so for our tests we want to load our develo
 
 
 
-- Serving the Application with Gunicorn
+- Serving the Application with Gunicorn 
 
   So far, we've been using the development web server that is built into Django; this is great for development because 
   every time we change our code this web server automatically restarts our application; but this server is only meant 
