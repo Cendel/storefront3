@@ -12,7 +12,7 @@
   For now, as part of our development, we need to set up a fake SMTP server. 
   The one that I personally prefer is called 'smtp4dev' => https://github.com/rnwood/smtp4dev
   Look at the installation instructions. 
-  So there are a few ways to install smtp4dev.  
+  So there are a few ways to install smtp4dev.   
   
   We prefer here installing via Docker. So paste the following command into terminal to download the image:
 
